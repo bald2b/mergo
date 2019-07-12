@@ -26,6 +26,13 @@ It is ready for production use. [It is used in several projects by Docker, Googl
 [9]: https://sourcegraph.com/github.com/imdario/mergo/-/badge.svg
 [10]: https://sourcegraph.com/github.com/imdario/mergo?badge
 
+### Attention
+ 
+This is fork of https://github.com/imdario/mergo
+
+Added transformer mergo.WithBoolIsAlwaysNotEmpty that allows override **bool**
+ true values at parent structs 
+
 ### Latest release
 
 [Release v0.3.7](https://github.com/imdario/mergo/releases/tag/v0.3.7).
