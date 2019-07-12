@@ -31,6 +31,7 @@ type Config struct {
 	TypeCheck               bool
 	Transformers            Transformers
 	overwriteWithEmptyValue bool
+	boolIsAlwaysNotEmpty    bool
 }
 
 type Transformers interface {
@@ -43,6 +44,7 @@ type Transformers interface {
 func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, config *Config) (err error) {
 	overwrite := config.Overwrite
 	typeCheck := config.TypeCheck
+	boolNotEmpty := config.boolIsAlwaysNotEmpty
 	overwriteWithEmptySrc := config.overwriteWithEmptyValue
 	config.overwriteWithEmptyValue = false
 
@@ -63,7 +65,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 		visited[h] = &visit{addr, typ, seen}
 	}
 
-	if config.Transformers != nil && !isEmptyValue(dst) {
+	if config.Transformers != nil && !isEmptyValue(dst, boolNotEmpty) {
 		if fn := config.Transformers.Transformer(dst.Type()); fn != nil {
 			err = fn(dst, src)
 			return
@@ -79,7 +81,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 				}
 			}
 		} else {
-			if dst.CanSet() && (!isEmptyValue(src) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst)) {
+			if dst.CanSet() && (!isEmptyValue(src, boolNotEmpty) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst, boolNotEmpty)) {
 				dst.Set(src)
 			}
 		}
@@ -130,7 +132,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 						dstSlice = reflect.ValueOf(dstElement.Interface())
 					}
 
-					if (!isEmptyValue(src) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst)) && !config.AppendSlice {
+					if (!isEmptyValue(src, boolNotEmpty) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst, boolNotEmpty)) && !config.AppendSlice {
 						if typeCheck && srcSlice.Type() != dstSlice.Type() {
 							return fmt.Errorf("cannot override two slices with different type (%s, %s)", srcSlice.Type(), dstSlice.Type())
 						}
@@ -144,11 +146,11 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 					dst.SetMapIndex(key, dstSlice)
 				}
 			}
-			if dstElement.IsValid() && !isEmptyValue(dstElement) && (reflect.TypeOf(srcElement.Interface()).Kind() == reflect.Map || reflect.TypeOf(srcElement.Interface()).Kind() == reflect.Slice) {
+			if dstElement.IsValid() && !isEmptyValue(dstElement, boolNotEmpty) && (reflect.TypeOf(srcElement.Interface()).Kind() == reflect.Map || reflect.TypeOf(srcElement.Interface()).Kind() == reflect.Slice) {
 				continue
 			}
 
-			if srcElement.IsValid() && ((srcElement.Kind() != reflect.Ptr && overwrite) || !dstElement.IsValid() || isEmptyValue(dstElement)) {
+			if srcElement.IsValid() && ((srcElement.Kind() != reflect.Ptr && overwrite) || !dstElement.IsValid() || isEmptyValue(dstElement, boolNotEmpty)) {
 				if dst.IsNil() {
 					dst.Set(reflect.MakeMap(dst.Type()))
 				}
@@ -159,7 +161,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 		if !dst.CanSet() {
 			break
 		}
-		if (!isEmptyValue(src) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst)) && !config.AppendSlice {
+		if (!isEmptyValue(src, boolNotEmpty) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst, boolNotEmpty)) && !config.AppendSlice {
 			dst.Set(src)
 		} else if config.AppendSlice {
 			if src.Type() != dst.Type() {
@@ -176,7 +178,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 
 		if dst.Kind() != reflect.Ptr && src.Type().AssignableTo(dst.Type()) {
 			if dst.IsNil() || overwrite {
-				if dst.CanSet() && (overwrite || isEmptyValue(dst)) {
+				if dst.CanSet() && (overwrite || isEmptyValue(dst, boolNotEmpty)) {
 					dst.Set(src)
 				}
 			}
@@ -185,7 +187,7 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 
 		if src.Kind() != reflect.Interface {
 			if dst.IsNil() || (src.Kind() != reflect.Ptr && overwrite) {
-				if dst.CanSet() && (overwrite || isEmptyValue(dst)) {
+				if dst.CanSet() && (overwrite || isEmptyValue(dst, boolNotEmpty)) {
 					dst.Set(src)
 				}
 			} else if src.Kind() == reflect.Ptr {
@@ -202,14 +204,14 @@ func deepMerge(dst, src reflect.Value, visited map[uintptr]*visit, depth int, co
 			break
 		}
 		if dst.IsNil() || overwrite {
-			if dst.CanSet() && (overwrite || isEmptyValue(dst)) {
+			if dst.CanSet() && (overwrite || isEmptyValue(dst, boolNotEmpty)) {
 				dst.Set(src)
 			}
 		} else if err = deepMerge(dst.Elem(), src.Elem(), visited, depth+1, config); err != nil {
 			return
 		}
 	default:
-		if dst.CanSet() && (!isEmptyValue(src) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst)) {
+		if dst.CanSet() && (!isEmptyValue(src, boolNotEmpty) || overwriteWithEmptySrc) && (overwrite || isEmptyValue(dst, boolNotEmpty)) {
 			dst.Set(src)
 		}
 	}
@@ -252,6 +254,11 @@ func WithAppendSlice(config *Config) {
 // WithTypeCheck will make merge check types while overwriting it (must be used with WithOverride).
 func WithTypeCheck(config *Config) {
 	config.TypeCheck = true
+}
+
+// bool values will always not empty values
+func WithBoolIsAlwaysNotEmpty(config *Config) {
+	config.boolIsAlwaysNotEmpty = true
 }
 
 func merge(dst, src interface{}, opts ...func(*Config)) error {

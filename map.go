@@ -33,6 +33,7 @@ func isExported(field reflect.StructField) bool {
 // short circuiting on recursive types.
 func deepMap(dst, src reflect.Value, visited map[uintptr]*visit, depth int, config *Config) (err error) {
 	overwrite := config.Overwrite
+	boolNotEmpty := config.boolIsAlwaysNotEmpty
 	if dst.CanAddr() {
 		addr := dst.UnsafeAddr()
 		h := 17 * addr
@@ -58,7 +59,7 @@ func deepMap(dst, src reflect.Value, visited map[uintptr]*visit, depth int, conf
 			}
 			fieldName := field.Name
 			fieldName = changeInitialCase(fieldName, unicode.ToLower)
-			if v, ok := dstMap[fieldName]; !ok || (isEmptyValue(reflect.ValueOf(v)) || overwrite) {
+			if v, ok := dstMap[fieldName]; !ok || (isEmptyValue(reflect.ValueOf(v), boolNotEmpty) || overwrite) {
 				dstMap[fieldName] = src.Field(i).Interface()
 			}
 		}
